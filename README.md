@@ -20,9 +20,14 @@ python -m flowwatch enqueue --key contato-001 --type normalize_contact --payload
 python -m flowwatch run-once
 python -m flowwatch report
 python -m flowwatch worker --interval 2
+python -m flowwatch metrics
 ```
 
 No PowerShell, as aspas do JSON podem exigir escape diferente; o comando `demo` dispensa isso. O banco padrão fica em `data/flowwatch.sqlite`, ignorado pelo Git. `worker` é um processo contínuo que pode ser parado com Ctrl+C. Em produção, executaria esse processo sob um supervisor e monitoraria o número de jobs `dead` e a idade da fila `pending`.
+
+## Recuperação operacional
+
+Um job na fila morta não é reativado silenciosamente. Depois de corrigir a causa na origem, o operador pode executar `python -m flowwatch requeue-dead --job-id 3 --actor equipe-ti --reason "Falha transitória corrigida na origem"`. Isso cria **outro job**, mantém o original e sua chave de idempotência intactos e grava uma ação de operador imutável ligando ambos. Não edite o payload diretamente no banco; se ele estiver incorreto, crie um novo job com chave e conteúdo próprios.
 
 ## Por que essas peças existem
 
@@ -33,3 +38,8 @@ O projeto usa SQLite por ser simples de executar e inspecionar. Para múltiplos 
 ## Testes, deploy e rollback
 
 Os testes cobrem replay, conflito de payload, execução atômica, retries, fila morta, lease expirado, proteção contra worker obsoleto, escape no relatório, constraints e rollback. A migração está em `flowwatch/up.sql`; `flowwatch/down.sql` a desfaz, **apagando jobs, resultados e tentativas**. Em uma instância com dados reais, pause os workers, copie o arquivo SQLite e teste a restauração antes de executar o rollback. Não execute o comando `demo` com dados reais: ele foi criado só para portfólio.
+
+---
+
+<p align="center"><a href="https://github.com/LuisInacioDasilva"><img src="https://avatars.githubusercontent.com/u/88007376?v=4" width="82" height="82" alt="Foto de Luis da Silva" style="border-radius:50%"></a></p>
+<p align="center"><strong>Desenvolvido por Luis da Silva</strong><br>Back-end, dados, integrações e automação em produção.</p>

@@ -36,6 +36,6 @@ def write_report(store, path: str | Path):
     <section class="stats"><div class="stat"><span>Pendentes</span><strong>{counts.get('pending', 0)}</strong></div><div class="stat"><span>Em execução</span><strong>{counts.get('running', 0)}</strong></div><div class="stat"><span>Concluídos</span><strong>{counts.get('done', 0)}</strong></div><div class="stat"><span>Fila morta</span><strong>{counts.get('dead', 0)}</strong></div></section>
     <section class="panel"><h2>Jobs</h2><table><thead><tr><th>ID</th><th>Rotina</th><th>Estado</th><th>Tentativas</th><th>Último erro</th></tr></thead><tbody>{table_rows}</tbody></table></section>
     <section class="panel"><h2>Últimas tentativas</h2><table><thead><tr><th>Job</th><th>Tentativa</th><th>Resultado</th><th>Erro</th></tr></thead><tbody>{attempt_rows}</tbody></table></section>
-    <footer>Dados sintéticos na demo. Nenhum telefone ou payload é exibido no relatório.</footer></main></body></html>"""
+    <footer>Dados sintéticos na demo. Nenhum telefone ou payload é exibido no relatório.<div style="display:flex;align-items:center;gap:12px;margin-top:22px;padding-top:19px;border-top:1px solid #34405b"><img src="https://avatars.githubusercontent.com/u/88007376?v=4" alt="Foto de Luis da Silva" width="44" height="44" style="border-radius:50%;object-fit:cover"><span>Desenvolvido por <a href="https://github.com/LuisInacioDasilva" style="color:#a7a0ff">Luis da Silva</a> · Back-end e automações.</span></div></footer></main></body></html>"""
     path.write_text(document, encoding="utf-8")
     return path
