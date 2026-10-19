@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="240" viewBox="0 0 960 240" role="img" aria-labelledby="title desc">
+  <title id="title">FLOWWATCH AUTOMATIONS</title><desc id="desc">Fila durável, execução rastreável e falha tratada de frente.</desc>
+  <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#091522"/><stop offset="1" stop-color="#17283c"/></linearGradient><linearGradient id="accent"><stop stop-color="#65dfb3"/><stop offset="1" stop-color="#62b7ff"/></linearGradient><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#60728c" stroke-width=".5" opacity=".25"/></pattern>
+  <style>.scan{animation:scan 5s ease-in-out infinite alternate}.beacon{animation:blink 2s ease-in-out infinite}@keyframes scan{to{transform:translateY(165px)}}@keyframes blink{50%{opacity:.2}}@media(prefers-reduced-motion:reduce){.scan,.beacon{animation:none}}</style></defs>
+  <rect width="960" height="240" rx="18" fill="url(#bg)"/><rect width="960" height="240" rx="18" fill="url(#grid)"/><rect x="22" y="18" width="916" height="204" rx="14" fill="none" stroke="#65dfb3" stroke-opacity=".42"/>
+  <path class="scan" d="M32 28h896" stroke="url(#accent)" stroke-opacity=".24"/>
+  <text x="48" y="55" fill="#65dfb3" font-family="monospace" font-size="12" letter-spacing="3">WORKFLOWS / RETRIES / RECOVERY</text>
+  <text x="48" y="120" fill="#f4fbff" font-family="Arial,sans-serif" font-weight="800" font-size="35">FLOWWATCH AUTOMATIONS</text>
+  <text x="50" y="151" fill="#bdcad9" font-family="Arial,sans-serif" font-size="15">Fila durável, execução rastreável e falha tratada de frente.</text>
+  <g transform="translate(50 178)" font-family="monospace" font-size="11" fill="#65dfb3">
+  <rect x="0" width="110" height="27" rx="6" fill="#172b36" stroke="#65dfb3" stroke-opacity=".5"/><text x="12" y="18">PYTHON</text><rect x="119" width="110" height="27" rx="6" fill="#172b36" stroke="#65dfb3" stroke-opacity=".5"/><text x="131" y="18">SQLITE</text><rect x="238" width="110" height="27" rx="6" fill="#172b36" stroke="#65dfb3" stroke-opacity=".5"/><text x="250" y="18">SCHEDULES</text></g>
+  <g fill="none" stroke="#62c7c0" stroke-width="2"><path d="M560 108h345"/><path d="M705 108v48h130"/></g><g fill="#102a31" stroke="#55c7b0"><rect x="545" y="84" width="92" height="48" rx="10"/><rect x="673" y="84" width="92" height="48" rx="10"/><rect x="801" y="84" width="104" height="48" rx="10"/><rect x="799" y="140" width="104" height="36" rx="8" stroke="#ff9e78"/></g><g fill="#e4fff5" font-family="monospace" font-size="10" text-anchor="middle"><text x="591" y="112">QUEUE</text><text x="719" y="112">WORKER</text><text x="853" y="112">RESULT</text><text x="851" y="162">DEAD LETTER</text></g><circle class="beacon" cx="652" cy="108" r="4" fill="#6dffd1"/>
+</svg>
+
