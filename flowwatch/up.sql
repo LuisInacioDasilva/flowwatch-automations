@@ -38,3 +38,18 @@ CREATE TABLE IF NOT EXISTS results (
     output_json TEXT NOT NULL,
     completed_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS operator_actions (
+    id INTEGER PRIMARY KEY,
+    job_id INTEGER NOT NULL REFERENCES jobs(id),
+    new_job_id INTEGER NOT NULL UNIQUE REFERENCES jobs(id),
+    actor TEXT NOT NULL CHECK (length(actor) BETWEEN 2 AND 100),
+    action TEXT NOT NULL CHECK (action = 'requeue_dead'),
+    reason TEXT NOT NULL CHECK (length(reason) BETWEEN 5 AND 500),
+    created_at INTEGER NOT NULL
+);
+
+CREATE TRIGGER IF NOT EXISTS operator_actions_no_update BEFORE UPDATE ON operator_actions
+BEGIN SELECT RAISE(ABORT, 'operator action is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS operator_actions_no_delete BEFORE DELETE ON operator_actions
+BEGIN SELECT RAISE(ABORT, 'operator action is immutable'); END;

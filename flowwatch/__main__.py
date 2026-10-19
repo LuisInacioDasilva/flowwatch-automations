@@ -19,6 +19,11 @@ def main():
     sub.add_parser("run-once")
     worker = sub.add_parser("worker")
     worker.add_argument("--interval", type=float, default=2)
+    sub.add_parser("metrics")
+    requeue = sub.add_parser("requeue-dead")
+    requeue.add_argument("--job-id", type=int, required=True)
+    requeue.add_argument("--actor", required=True)
+    requeue.add_argument("--reason", required=True)
     report = sub.add_parser("report")
     report.add_argument("--output", default="dist/index.html")
     demo = sub.add_parser("demo")
@@ -58,6 +63,11 @@ def main():
                 pass
         elif args.command == "report":
             print(f"Relatório: {write_report(store, args.output)}")
+        elif args.command == "metrics":
+            print(json.dumps(store.metrics(), ensure_ascii=False, indent=2))
+        elif args.command == "requeue-dead":
+            new_id = store.requeue_dead(args.job_id, actor=args.actor, reason=args.reason)
+            print(f"Job #{args.job_id} preservado; recuperação autorizada como job #{new_id}")
     finally:
         store.close()
 

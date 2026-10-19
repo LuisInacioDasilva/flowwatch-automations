@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from flowwatch.engine import IdempotencyConflict, StaleLease, Store
+from flowwatch.engine import IdempotencyConflict, InvalidRequeue, StaleLease, Store
 from flowwatch.report import write_report
 
 
@@ -72,6 +72,27 @@ class StoreTests(unittest.TestCase):
         report = write_report(self.store, Path(self.temp.name) / "report.html").read_text(encoding="utf-8")
         self.assertIn("&lt;script&gt;", report)
         self.assertNotIn("11999998888", report)
+
+    def test_dead_job_recovery_creates_linked_job_and_immutable_operator_record(self):
+        original = self.store.enqueue(key="recovery", task_type="normalize_contact", payload={"name": "Ana", "phone": "12"}, now=100, max_attempts=1)
+        self.store.process_one(now=100)
+        new_id = self.store.requeue_dead(original, actor="operador", reason="Corrigir dado na origem", now=101)
+        self.assertNotEqual(original, new_id)
+        self.assertEqual(self.store.db.execute("SELECT state FROM jobs WHERE id = ?", (original,)).fetchone()[0], "dead")
+        self.assertEqual(self.store.db.execute("SELECT state FROM jobs WHERE id = ?", (new_id,)).fetchone()[0], "pending")
+        self.assertEqual(self.store.db.execute("SELECT new_job_id FROM operator_actions WHERE job_id = ?", (original,)).fetchone()[0], new_id)
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.store.db.execute("DELETE FROM operator_actions")
+        self.assertEqual(self.store.metrics(now=101)["requeues"], 1)
+        with self.assertRaises(InvalidRequeue):
+            self.store.requeue_dead(new_id, actor="operador", reason="Tentar novamente", now=102)
+
+    def test_metrics_pending_age_is_never_negative(self):
+        self.store.enqueue(key="age", task_type="draft_summary", payload={"amounts_cents": [1]}, now=100)
+        self.assertEqual(self.store.metrics(now=105)["oldest_pending_seconds"], 5)
+        self.assertEqual(self.store.metrics(now=95)["oldest_pending_seconds"], 0)
+        self.store.process_one(now=100)
+        self.assertIsNone(self.store.metrics(now=105)["oldest_pending_seconds"])
 
     def test_schema_enforces_unique_and_rollback(self):
         self.store.enqueue(key="unique", task_type="draft_summary", payload={"amounts_cents": [1]}, now=100)

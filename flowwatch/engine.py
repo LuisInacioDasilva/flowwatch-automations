@@ -17,6 +17,10 @@ class StaleLease(RuntimeError):
     pass
 
 
+class InvalidRequeue(ValueError):
+    pass
+
+
 class Store:
     def __init__(self, path: str | Path = ":memory:"):
         self.db = sqlite3.connect(path, isolation_level=None, timeout=10)
@@ -134,6 +138,42 @@ class Store:
         except ValueError as exc:
             self.fail(job, str(exc), now=now)
         return True
+
+    def requeue_dead(self, job_id: int, *, actor: str, reason: str, now: int | None = None) -> int:
+        """Manual recovery creates a linked job, preserving the original idempotency record."""
+        now = int(time.time()) if now is None else now
+        actor, reason = actor.strip(), reason.strip()
+        if not 2 <= len(actor) <= 100 or not 5 <= len(reason) <= 500:
+            raise InvalidRequeue("actor or reason is invalid")
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            if row is None or row["state"] != "dead":
+                raise InvalidRequeue("only a dead job can be requeued")
+            cursor = self.db.execute("""INSERT INTO jobs
+                (idempotency_key, payload_hash, task_type, payload_json, max_attempts, run_after, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (
+                    f"requeue:{job_id}:{uuid.uuid4().hex}", row["payload_hash"], row["task_type"],
+                    row["payload_json"], row["max_attempts"], now, now, now,
+                ))
+            self.db.execute("""INSERT INTO operator_actions (job_id, new_job_id, actor, action, reason, created_at)
+                VALUES (?, ?, ?, 'requeue_dead', ?, ?)""", (job_id, cursor.lastrowid, actor, reason, now))
+            self.db.execute("COMMIT")
+            return cursor.lastrowid
+        except Exception:
+            self.db.execute("ROLLBACK")
+            raise
+
+    def metrics(self, *, now: int | None = None) -> dict:
+        now = int(time.time()) if now is None else now
+        counts = {row["state"]: row["count"] for row in self.db.execute(
+            "SELECT state, count(*) AS count FROM jobs GROUP BY state")}
+        oldest = self.db.execute("SELECT min(created_at) FROM jobs WHERE state = 'pending'").fetchone()[0]
+        return {
+            "jobs": {state: counts.get(state, 0) for state in ("pending", "running", "done", "dead")},
+            "oldest_pending_seconds": max(0, now - oldest) if oldest is not None else None,
+            "requeues": self.db.execute("SELECT count(*) FROM operator_actions").fetchone()[0],
+        }
 
 
 def handle(task_type: str, payload: dict) -> dict:
