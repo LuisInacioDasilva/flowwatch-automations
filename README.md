@@ -1,3 +1,7 @@
+<p align="center"><img src="./assets/hero.svg" alt="FLOWWATCH AUTOMATIONS: Fila durável, execução rastreável e falha tratada de frente." width="960"></p>
+
+<p align="center"><a href="#ver-rodando">Demo local</a> · <a href="#agendas-recorrentes">Agendas</a> · <a href="#testes-deploy-e-rollback">Testes e operação</a></p>
+
 # Flowwatch Automations
 
 Automação boa não é só um cron que roda quando dá certo. Este projeto é um motor local para executar rotinas com fila persistente, agendas recorrentes, chave de idempotência, retries, lease de execução e trilha por tentativa. Fiz o exemplo com tarefas sintéticas de normalização de contato e resumo de valores; os handlers não enviam nada para fora.
@@ -54,3 +58,4 @@ Os testes cobrem replay, conflito de payload, execução atômica, retries, fila
 
 <p align="center"><a href="https://github.com/LuisInacioDasilva"><img src="https://avatars.githubusercontent.com/u/88007376?v=4" width="82" height="82" alt="Foto de Luis da Silva" style="border-radius:50%"></a></p>
 <p align="center"><strong>Desenvolvido por Luis da Silva</strong><br>Back-end, dados, integrações e automação em produção.</p>
+
