@@ -16,6 +16,17 @@ def main():
     enqueue.add_argument("--type", required=True, choices=["normalize_contact", "draft_summary"])
     enqueue.add_argument("--payload", required=True, help="JSON do payload")
     enqueue.add_argument("--max-attempts", type=int, default=3)
+    schedule = sub.add_parser("schedule-add")
+    schedule.add_argument("--name", required=True)
+    schedule.add_argument("--type", required=True, choices=["normalize_contact", "draft_summary"])
+    schedule.add_argument("--payload", required=True, help="JSON do payload")
+    schedule.add_argument("--interval", type=int, required=True, help="segundos entre execuções (60..86400)")
+    schedule.add_argument("--start-at", type=int, help="Unix timestamp; padrão: agora")
+    schedule.add_argument("--max-attempts", type=int, default=3)
+    toggle = sub.add_parser("schedule-toggle")
+    toggle.add_argument("--id", type=int, required=True)
+    toggle.add_argument("--enabled", choices=["yes", "no"], required=True)
+    sub.add_parser("schedule-tick")
     sub.add_parser("run-once")
     worker = sub.add_parser("worker")
     worker.add_argument("--interval", type=float, default=2)
@@ -37,6 +48,9 @@ def main():
         store.enqueue(key="demo-summary-1", task_type="draft_summary", payload={"amounts_cents": [12990, 24800, 7850]}, now=now)
         store.enqueue(key="demo-broken-1", task_type="normalize_contact", payload={"name": "Sem número", "phone": "123"}, now=now, max_attempts=2)
         store.enqueue(key="demo-contact-2", task_type="normalize_contact", payload={"name": "Bruno Reis", "phone": "11988887777"}, now=now)
+        store.add_schedule(name="demo-summary", task_type="draft_summary", payload={"amounts_cents": [1500, 2800]},
+                           interval_seconds=3600, start_at=now)
+        store.tick(now=now)
         for step in range(4):
             while store.process_one(now=now + step * 10):
                 pass
@@ -51,12 +65,24 @@ def main():
         if args.command == "enqueue":
             job_id = store.enqueue(key=args.key, task_type=args.type, payload=json.loads(args.payload), max_attempts=args.max_attempts)
             print(f"Job #{job_id}")
+        elif args.command == "schedule-add":
+            schedule_id = store.add_schedule(name=args.name, task_type=args.type, payload=json.loads(args.payload),
+                                             interval_seconds=args.interval, start_at=args.start_at,
+                                             max_attempts=args.max_attempts)
+            print(f"Agenda #{schedule_id}")
+        elif args.command == "schedule-toggle":
+            store.set_schedule_enabled(args.id, args.enabled == "yes")
+            print(f"Agenda #{args.id}: {'ativa' if args.enabled == 'yes' else 'pausada'}")
+        elif args.command == "schedule-tick":
+            print(f"{store.tick()} ocorrência(s) materializada(s)")
         elif args.command == "run-once":
+            store.tick()
             print("executado" if store.process_one() else "nenhum job pronto")
         elif args.command == "worker":
             print("Worker ativo; Ctrl+C para parar")
             try:
                 while True:
+                    store.tick()
                     if not store.process_one():
                         time.sleep(args.interval)
             except KeyboardInterrupt:

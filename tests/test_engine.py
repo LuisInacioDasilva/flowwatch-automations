@@ -94,12 +94,51 @@ class StoreTests(unittest.TestCase):
         self.store.process_one(now=100)
         self.assertIsNone(self.store.metrics(now=105)["oldest_pending_seconds"])
 
+    def test_schedule_materializes_each_due_time_once_and_can_be_paused(self):
+        schedule_id = self.store.add_schedule(name="daily-summary", task_type="draft_summary",
+            payload={"amounts_cents": [100, 250]}, interval_seconds=60, start_at=100)
+        self.assertEqual(self.store.tick(now=99), 0)
+        self.assertEqual(self.store.tick(now=100), 1)
+        self.assertEqual(self.store.tick(now=100), 0)
+        self.assertTrue(self.store.process_one(now=100))
+        self.assertEqual(self.store.tick(now=160), 1)
+        self.assertEqual(self.store.db.execute("SELECT count(*) FROM schedule_runs").fetchone()[0], 2)
+        self.store.set_schedule_enabled(schedule_id, False)
+        self.assertEqual(self.store.tick(now=220), 0)
+        self.store.set_schedule_enabled(schedule_id, True)
+        self.assertEqual(self.store.tick(now=220), 1)
+        self.assertEqual(self.store.metrics(now=220)["schedules_enabled"], 1)
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.store.db.execute("DELETE FROM schedule_runs")
+
+    def test_schedule_backfill_is_bounded_and_config_is_idempotent(self):
+        first = self.store.add_schedule(name="contact-check", task_type="normalize_contact",
+            payload={"name": "Ana", "phone": "11999998888"}, interval_seconds=60, start_at=100)
+        again = self.store.add_schedule(name="contact-check", task_type="normalize_contact",
+            payload={"phone": "11999998888", "name": "Ana"}, interval_seconds=60, start_at=999)
+        self.assertEqual(first, again)
+        with self.assertRaises(IdempotencyConflict):
+            self.store.add_schedule(name="contact-check", task_type="draft_summary",
+                payload={"amounts_cents": [1]}, interval_seconds=60, start_at=100)
+        self.assertEqual(self.store.tick(now=400, max_per_schedule=2), 2)
+        self.assertEqual(self.store.metrics(now=400)["schedule_backlog"], 1)
+        self.assertEqual(self.store.tick(now=400, max_per_schedule=2), 2)
+        self.assertEqual(self.store.tick(now=400, max_per_schedule=2), 2)
+        self.assertEqual(self.store.tick(now=400, max_per_schedule=2), 0)
+        self.assertEqual(self.store.db.execute("SELECT count(DISTINCT idempotency_key) FROM jobs").fetchone()[0], 6)
+        other_worker = Store(self.path)
+        try:
+            self.assertEqual(other_worker.tick(now=400), 0)
+        finally:
+            other_worker.close()
+
     def test_schema_enforces_unique_and_rollback(self):
         self.store.enqueue(key="unique", task_type="draft_summary", payload={"amounts_cents": [1]}, now=100)
         with self.assertRaises(sqlite3.IntegrityError):
             self.store.db.execute("INSERT INTO jobs (idempotency_key, payload_hash, task_type, payload_json, run_after, created_at, updated_at) VALUES ('unique','x','draft_summary','{}',100,100,100)")
         self.store.db.executescript((Path(__file__).parents[1] / "flowwatch" / "down.sql").read_text(encoding="utf-8"))
         self.assertEqual(self.store.db.execute("SELECT name FROM sqlite_master WHERE name = 'jobs'").fetchone(), None)
+        self.assertEqual(self.store.db.execute("SELECT name FROM sqlite_master WHERE name = 'schedules'").fetchone(), None)
 
 
 if __name__ == "__main__":

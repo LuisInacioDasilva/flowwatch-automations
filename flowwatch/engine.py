@@ -62,6 +62,77 @@ class Store:
             self.db.execute("ROLLBACK")
             raise
 
+    def add_schedule(self, *, name: str, task_type: str, payload: dict, interval_seconds: int,
+                     start_at: int | None = None, max_attempts: int = 3) -> int:
+        start_at = int(time.time()) if start_at is None else start_at
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{2,79}", name):
+            raise ValueError("invalid schedule name")
+        if task_type not in {"normalize_contact", "draft_summary"} or not isinstance(payload, dict):
+            raise ValueError("invalid task type or payload")
+        if not 60 <= interval_seconds <= 86400 or not 1 <= max_attempts <= 10:
+            raise ValueError("invalid interval or attempt limit")
+        content = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        if len(content) > 10000:
+            raise ValueError("payload too large")
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            existing = self.db.execute("SELECT * FROM schedules WHERE name = ?", (name,)).fetchone()
+            if existing:
+                if (existing["task_type"], existing["payload_json"], existing["interval_seconds"], existing["max_attempts"]) != (
+                        task_type, content, interval_seconds, max_attempts):
+                    raise IdempotencyConflict("schedule name reused with different configuration")
+                self.db.execute("COMMIT")
+                return existing["id"]
+            cursor = self.db.execute("""INSERT INTO schedules
+                (name, task_type, payload_json, interval_seconds, next_run_at, max_attempts, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (name, task_type, content, interval_seconds, start_at, max_attempts, int(time.time())))
+            self.db.execute("COMMIT")
+            return cursor.lastrowid
+        except Exception:
+            self.db.execute("ROLLBACK")
+            raise
+
+    def set_schedule_enabled(self, schedule_id: int, enabled: bool) -> None:
+        if type(enabled) is not bool:
+            raise ValueError("enabled must be boolean")
+        cursor = self.db.execute("UPDATE schedules SET enabled = ? WHERE id = ?", (int(enabled), schedule_id))
+        if cursor.rowcount != 1:
+            raise ValueError("schedule not found")
+
+    def tick(self, *, now: int | None = None, max_per_schedule: int = 10) -> int:
+        """Materialize due occurrences atomically; leave excess backlog for the next tick."""
+        now = int(time.time()) if now is None else now
+        if not 1 <= max_per_schedule <= 100:
+            raise ValueError("max_per_schedule must be between 1 and 100")
+        created = 0
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            due = list(self.db.execute("""SELECT * FROM schedules
+                WHERE enabled = 1 AND next_run_at <= ? ORDER BY next_run_at, id LIMIT 100""", (now,)))
+            for schedule in due:
+                due_at = schedule["next_run_at"]
+                count = 0
+                while due_at <= now and count < max_per_schedule:
+                    key = f"schedule:{schedule['id']}:{due_at}"
+                    digest = hashlib.sha256((schedule["task_type"] + "\0" + schedule["payload_json"]).encode()).hexdigest()
+                    job = self.db.execute("""INSERT INTO jobs
+                        (idempotency_key, payload_hash, task_type, payload_json, max_attempts, run_after, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (key, digest, schedule["task_type"], schedule["payload_json"],
+                         schedule["max_attempts"], due_at, now, now))
+                    self.db.execute("""INSERT INTO schedule_runs (schedule_id, due_at, job_id, created_at)
+                        VALUES (?, ?, ?, ?)""", (schedule["id"], due_at, job.lastrowid, now))
+                    due_at += schedule["interval_seconds"]
+                    count += 1
+                    created += 1
+                self.db.execute("UPDATE schedules SET next_run_at = ? WHERE id = ?", (due_at, schedule["id"]))
+            self.db.execute("COMMIT")
+            return created
+        except Exception:
+            self.db.execute("ROLLBACK")
+            raise
+
     def claim(self, *, now: int | None = None, lease_seconds: int = 60) -> dict | None:
         now = int(time.time()) if now is None else now
         if lease_seconds < 1:
@@ -173,6 +244,8 @@ class Store:
             "jobs": {state: counts.get(state, 0) for state in ("pending", "running", "done", "dead")},
             "oldest_pending_seconds": max(0, now - oldest) if oldest is not None else None,
             "requeues": self.db.execute("SELECT count(*) FROM operator_actions").fetchone()[0],
+            "schedules_enabled": self.db.execute("SELECT count(*) FROM schedules WHERE enabled = 1").fetchone()[0],
+            "schedule_backlog": self.db.execute("SELECT count(*) FROM schedules WHERE enabled = 1 AND next_run_at <= ?", (now,)).fetchone()[0],
         }
 
 

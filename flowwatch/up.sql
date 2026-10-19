@@ -49,6 +49,34 @@ CREATE TABLE IF NOT EXISTS operator_actions (
     created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS schedules (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE CHECK (length(name) BETWEEN 3 AND 80),
+    task_type TEXT NOT NULL CHECK (task_type IN ('normalize_contact', 'draft_summary')),
+    payload_json TEXT NOT NULL,
+    interval_seconds INTEGER NOT NULL CHECK (interval_seconds BETWEEN 60 AND 86400),
+    next_run_at INTEGER NOT NULL,
+    max_attempts INTEGER NOT NULL CHECK (max_attempts BETWEEN 1 AND 10),
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS schedules_due_idx ON schedules (enabled, next_run_at);
+
+CREATE TABLE IF NOT EXISTS schedule_runs (
+    id INTEGER PRIMARY KEY,
+    schedule_id INTEGER NOT NULL REFERENCES schedules(id),
+    due_at INTEGER NOT NULL,
+    job_id INTEGER NOT NULL UNIQUE REFERENCES jobs(id),
+    created_at INTEGER NOT NULL,
+    UNIQUE (schedule_id, due_at)
+);
+
+CREATE TRIGGER IF NOT EXISTS schedule_runs_no_update BEFORE UPDATE ON schedule_runs
+BEGIN SELECT RAISE(ABORT, 'schedule run is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS schedule_runs_no_delete BEFORE DELETE ON schedule_runs
+BEGIN SELECT RAISE(ABORT, 'schedule run is immutable'); END;
+
 CREATE TRIGGER IF NOT EXISTS operator_actions_no_update BEFORE UPDATE ON operator_actions
 BEGIN SELECT RAISE(ABORT, 'operator action is immutable'); END;
 CREATE TRIGGER IF NOT EXISTS operator_actions_no_delete BEFORE DELETE ON operator_actions

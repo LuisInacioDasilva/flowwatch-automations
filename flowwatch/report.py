@@ -1,4 +1,5 @@
 import html
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -10,6 +11,9 @@ def write_report(store, path: str | Path):
         FROM jobs ORDER BY id DESC"""))
     attempts = list(store.db.execute("""SELECT a.job_id, a.attempt_number, a.outcome, a.error
         FROM attempt_log a ORDER BY a.id DESC LIMIT 20"""))
+    schedules = list(store.db.execute("""SELECT s.id, s.name, s.interval_seconds, s.next_run_at, s.enabled,
+        count(r.id) AS runs FROM schedules s LEFT JOIN schedule_runs r ON r.schedule_id = s.id
+        GROUP BY s.id ORDER BY s.id"""))
     e = html.escape
     table_rows = "".join(
         f"<tr><td>#{job['id']}</td><td>{e(job['task_type'])}</td><td><span class='pill {e(job['state'])}'>{e(job['state'])}</span></td>"
@@ -19,6 +23,12 @@ def write_report(store, path: str | Path):
     attempt_rows = "".join(
         f"<tr><td>#{row['job_id']}</td><td>{row['attempt_number']}</td><td>{e(row['outcome'] or 'running')}</td><td>{e(row['error'] or '—')}</td></tr>"
         for row in attempts
+    )
+    schedule_rows = "".join(
+        f"<tr><td>#{row['id']}</td><td>{e(row['name'])}</td><td>{row['interval_seconds']} s</td>"
+        f"<td>{e(datetime.fromtimestamp(row['next_run_at'], timezone.utc).strftime('%d/%m/%Y %H:%M UTC'))}</td>"
+        f"<td>{'ativa' if row['enabled'] else 'pausada'}</td><td>{row['runs']}</td></tr>"
+        for row in schedules
     )
     document = f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Flowwatch · Execuções</title><style>
@@ -32,10 +42,11 @@ def write_report(store, path: str | Path):
     .done{{background:#194b3e;color:#82e8bb}}.dead{{background:#532838;color:#ffa0b7}}.running{{background:#504022;color:#f9d48a}}footer{{color:#7b8ca7;font-size:12px;margin-top:20px}}
     @media(max-width:700px){{.stats{{grid-template-columns:repeat(2,1fr)}}}}
     </style></head><body><main><div class="eyebrow">FLOWWATCH / AUTOMATION OPERATIONS</div><h1>Automação sem caixa-preta.</h1>
-    <p>Fila durável, chave de idempotência, tentativas com backoff, leases e trilha de execução. O relatório é gerado a partir do banco local, sem chamadas externas.</p>
+    <p>Fila durável, agendas recorrentes, chave de idempotência, tentativas com backoff, leases e trilha de execução. O relatório é gerado a partir do banco local, sem chamadas externas.</p>
     <section class="stats"><div class="stat"><span>Pendentes</span><strong>{counts.get('pending', 0)}</strong></div><div class="stat"><span>Em execução</span><strong>{counts.get('running', 0)}</strong></div><div class="stat"><span>Concluídos</span><strong>{counts.get('done', 0)}</strong></div><div class="stat"><span>Fila morta</span><strong>{counts.get('dead', 0)}</strong></div></section>
     <section class="panel"><h2>Jobs</h2><table><thead><tr><th>ID</th><th>Rotina</th><th>Estado</th><th>Tentativas</th><th>Último erro</th></tr></thead><tbody>{table_rows}</tbody></table></section>
     <section class="panel"><h2>Últimas tentativas</h2><table><thead><tr><th>Job</th><th>Tentativa</th><th>Resultado</th><th>Erro</th></tr></thead><tbody>{attempt_rows}</tbody></table></section>
+    <section class="panel"><h2>Agendas</h2><table><thead><tr><th>ID</th><th>Nome</th><th>Intervalo</th><th>Próxima execução</th><th>Estado</th><th>Ocorrências</th></tr></thead><tbody>{schedule_rows}</tbody></table></section>
     <footer>Dados sintéticos na demo. Nenhum telefone ou payload é exibido no relatório.<div style="display:flex;align-items:center;gap:12px;margin-top:22px;padding-top:19px;border-top:1px solid #34405b"><img src="https://avatars.githubusercontent.com/u/88007376?v=4" alt="Foto de Luis da Silva" width="44" height="44" style="border-radius:50%;object-fit:cover"><span>Desenvolvido por <a href="https://github.com/LuisInacioDasilva" style="color:#a7a0ff">Luis da Silva</a> · Back-end e automações.</span></div></footer></main></body></html>"""
     path.write_text(document, encoding="utf-8")
     return path
